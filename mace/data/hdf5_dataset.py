@@ -58,7 +58,7 @@ class HDF5Dataset(Dataset):
             dipole=unpack_value(subgrp["dipole"][()]),
             charges=unpack_value(subgrp["charges"][()]),
             weight=unpack_value(subgrp["weight"][()]),
-            head=unpack_value(subgrp["head"][()]),
+            head=unpack_value(subgrp["head"][()]) if hasattr(subgrp, "head") else None,
             energy_weight=unpack_value(subgrp["energy_weight"][()]),
             forces_weight=unpack_value(subgrp["forces_weight"][()]),
             stress_weight=unpack_value(subgrp["stress_weight"][()]),
@@ -67,12 +67,17 @@ class HDF5Dataset(Dataset):
             pbc=unpack_value(subgrp["pbc"][()]),
             cell=unpack_value(subgrp["cell"][()]),
         )
-        atomic_data = AtomicData.from_config(
-            config,
-            z_table=self.z_table,
-            cutoff=self.r_max,
-            heads=self.kwargs.get("heads", ["Default"]),
-        )
+        if config.head is None:
+            config.head = self.kwargs.get("head")
+        try:
+            atomic_data = AtomicData.from_config(
+                config,
+                z_table=self.z_table,
+                cutoff=self.r_max,
+                heads=self.kwargs.get("heads", ["Default"]),
+            )
+        except:
+            import ipdb; ipdb.set_trace()
         return atomic_data
 
 

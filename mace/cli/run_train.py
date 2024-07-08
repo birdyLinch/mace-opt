@@ -44,7 +44,7 @@ from mace.tools.finetuning_utils import (
     extract_config_mace_model,
 )
 from mace.tools.utils import AtomicNumberTable
-
+from torch.utils.data import ConcatDataset
 
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
@@ -282,24 +282,44 @@ def main() -> None:
     else:
         atomic_energies_dict = None
 
+    if args.heads is not None:
+        args.heads = ast.literal_eval(args.heads)
+        logging.info(
+            "Using heads from command line argument," f" heads used: {args.heads}"
+        )
+        heads = args.heads
     # Atomic number table
     # yapf: disable
-    if args.atomic_numbers is None:
-        assert args.train_file.endswith(".xyz"), "Must specify atomic_numbers when using .h5 train_file input"
-        z_table = tools.get_atomic_number_table_from_zs(
-            z
-            for configs in (collections.train, collections.valid)
-            for config in configs
-            for z in config.atomic_numbers
-        )
-    else:
-        if args.statistics_file is None:
-            logging.info("Using atomic numbers from command line argument")
-        else:
-            logging.info("Using atomic numbers from statistics file")
-        zs_list = ast.literal_eval(args.atomic_numbers)
+    # prioritize getting z_table from E0s
+    if args.E0s is not None:
+        logging.info("Prioritize getting z_table from E0s")
+        E0s = ast.literal_eval(args.E0s)
+        zs_dict = {k:v.keys() for k,v in E0s.items()}
+        list_of_lists = zs_dict.values()
+        flattened_list = [num for sublist in list_of_lists for num in sublist]
+        # union of zs among different datasets
+        unique_elements = set(flattened_list)
+        zs_list = list(unique_elements)
         assert isinstance(zs_list, list)
         z_table = tools.get_atomic_number_table_from_zs(zs_list)
+
+    # if args.atomic_numbers is None:
+    #     assert args.train_file.endswith(".xyz"), "Must specify atomic_numbers when using .h5 train_file input"
+    #     z_table = tools.get_atomic_number_table_from_zs(
+    #         z
+    #         for configs in (collections.train, collections.valid)
+    #         for config in configs
+    #         for z in config.atomic_numbers
+    #     )
+    # else:
+    #     if args.statistics_file is None:
+    #         logging.info("Using atomic numbers from command line argument")
+    #     else:
+    #         logging.info("Using atomic numbers from statistics file")
+    #     zs_list = ast.literal_eval(args.atomic_numbers)
+    #     assert isinstance(zs_list, list)
+    #     z_table = tools.get_atomic_number_table_from_zs(zs_list)
+    
     # yapf: enable
     logging.info(z_table)
 
@@ -310,7 +330,9 @@ def main() -> None:
             )
         else:
             atomic_energies_dict = get_atomic_energies(args.E0s, None, z_table, heads)
+    
     if args.multiheads_finetuning:
+        assert False, "this should not be run [temp]"
         assert (
             model_foundation is not None
         ), "Model foundation must be provided for multiheads finetuning"
@@ -377,9 +399,23 @@ def main() -> None:
             args.valid_file, r_max=args.r_max, z_table=z_table, heads=heads
         )
     else:  # This case would be for when the file path is to a directory of multiple .h5 files
-        train_set = data.dataset_from_sharded_hdf5(
-            args.train_file, r_max=args.r_max, z_table=z_table, heads=heads
-        )
+        if check_folder_subfolder(args.train_file):
+            train_sets = {}
+            for head in heads:
+                train_sets[head] = data.dataset_from_sharded_hdf5(
+                    os.path.join(args.train_file, head),
+                    r_max=args.r_max,
+                    z_table=z_table,
+                    heads=heads,
+                    head=head
+                )
+            train_set = ConcatDataset(train_sets.values())
+            # train_set = train_sets['MatProj']
+            # import ipdb; ipdb.set_trace()
+        else:
+            train_set = data.dataset_from_sharded_hdf5(
+               args.train_file, r_max=args.r_max, z_table=z_table, heads=heads
+            )
         # check if the folder has subfolders for each head by opening args.valid_file folder
         if check_folder_subfolder(args.valid_file):
             valid_sets = {}
@@ -389,6 +425,7 @@ def main() -> None:
                     r_max=args.r_max,
                     z_table=z_table,
                     heads=heads,
+                    head=head
                 )
         else:
             valid_set = data.dataset_from_sharded_hdf5(
@@ -503,7 +540,7 @@ def main() -> None:
     logging.info(loss_fn)
 
     if args.compute_avg_num_neighbors:
-        avg_num_neighbors = modules.compute_avg_num_neighbors(train_loader)
+        avg_num_neighbors = modules.compute_avg_num_neighbors(train_loader, rank=rank)
         if args.distributed:
             num_graphs = torch.tensor(len(train_loader.dataset)).to(device)
             num_neighbors = num_graphs * torch.tensor(avg_num_neighbors).to(device)
@@ -537,7 +574,7 @@ def main() -> None:
         logging.info("No scaling selected")
     elif (args.mean is None or args.std is None) and args.model != "AtomicDipolesMACE":
         args.mean, args.std = modules.scaling_classes[args.scaling](
-            train_loader, atomic_energies
+            train_loader, atomic_energies, rank=rank
         )
     # Build model
     if args.foundation_model is not None:
@@ -914,6 +951,7 @@ def main() -> None:
                 for config in subset
             ]
     elif not args.multi_processed_test:
+        assert False, "should do not run this [temp]"
         test_files = get_files_with_suffix(args.test_dir, "_test.h5")
         for test_file in test_files:
             name = os.path.splitext(os.path.basename(test_file))[0]
@@ -921,12 +959,14 @@ def main() -> None:
                 test_file, r_max=args.r_max, z_table=z_table, heads=heads
             )
     else:
-        test_folders = glob(args.test_dir + "/*")
-        for folder in test_folders:
-            name = os.path.splitext(os.path.basename(test_file))[0]
-            test_sets[name] = data.dataset_from_sharded_hdf5(
-                folder, r_max=args.r_max, z_table=z_table, heads=heads
-            )
+        for head in heads:
+            import ipdb; ipdb.set_trace()
+            test_folders = glob(os.path.join(args.test_dir, head) + "/*")
+            for folder in test_folders:
+                name = os.path.splitext(os.path.basename(folder))[0]
+                test_sets[head+name] = data.dataset_from_sharded_hdf5(
+                    folder, r_max=args.r_max, z_table=z_table, heads=heads, head=head
+                )
 
     for test_name, test_set in test_sets.items():
         test_sampler = None

@@ -18,7 +18,8 @@ from mace.tools.scatter import scatter_mean, scatter_std, scatter_sum
 from mace.tools.torch_geometric.batch import Batch
 
 from .blocks import AtomicEnergiesBlock
-
+from tqdm import tqdm
+import torch.distributed as dist
 
 def compute_forces(
     energy: torch.Tensor, positions: torch.Tensor, training: bool = True
@@ -233,6 +234,7 @@ def _compute_mean_std_atomic_inter_energy(
 def compute_mean_rms_energy_forces(
     data_loader: torch.utils.data.DataLoader,
     atomic_energies: np.ndarray,
+    rank=0,
 ) -> Tuple[float, float]:
     atomic_energies_fn = AtomicEnergiesBlock(atomic_energies=atomic_energies)
 
@@ -241,7 +243,11 @@ def compute_mean_rms_energy_forces(
     head_list = []
     head_batch = []
 
-    for batch in data_loader:
+    if rank == 0:
+        data_iter = tqdm(data_loader)
+    else:
+        data_iter = data_loader
+    for batch in data_iter:
         head = batch.head
         node_e0 = atomic_energies_fn(batch.node_attrs)
         graph_e0s = scatter_sum(
@@ -289,10 +295,15 @@ def _compute_mean_rms_energy_forces(
     return atom_energies, forces
 
 
-def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader) -> float:
+def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader, rank=0) -> float:
     num_neighbors = []
 
-    for batch in data_loader:
+    if rank == 0:
+        data_iter = tqdm(data_loader)
+    else:
+        data_iter = data_loader
+    
+    for batch in data_iter:
         _, receivers = batch.edge_index
         _, counts = torch.unique(receivers, return_counts=True)
         num_neighbors.append(counts)

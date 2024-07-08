@@ -4,6 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+from tqdm import tqdm
 import dataclasses
 import logging
 import time
@@ -303,7 +304,15 @@ def train_one_epoch(
     rank: Optional[int] = 0,
 ) -> None:
     model_to_train = model if distributed_model is None else distributed_model
-    for batch in data_loader:
+    
+
+    if rank == 0:
+        data_iter = tqdm(data_loader)
+    else:
+        data_iter = data_loader
+
+    
+    for batch in data_iter:
         _, opt_metrics = take_step(
             model=model_to_train,
             loss_fn=loss_fn,
