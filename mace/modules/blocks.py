@@ -747,7 +747,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         message = scatter_sum(
             src=mji, index=receiver, dim=0, dim_size=num_nodes
         )  # [n_nodes, irreps]
-        message = self.linear(message) / self.avg_num_neighbors
+        message = self.linear(message) / self.avg_num_neighbors # TODO: spicies dependant avg num
         return (
             self.reshape(message),
             sc,

@@ -5,6 +5,9 @@
 ###########################################################################################
 
 from tqdm import tqdm
+from functools import partial
+tqdm = partial(tqdm, ncols=55)
+
 import dataclasses
 import logging
 import time
@@ -224,42 +227,57 @@ def train(
                         device=device,
                     )
                     valid_loss += valid_loss_head
-                    valid_err_log(
-                        valid_loss_head,
-                        eval_metrics,
-                        logger,
-                        log_errors,
-                        epoch,
-                        valid_loader_name,
-                    )
-                    if log_wandb:
-                        wandb_log_dict[valid_loader_name] = {
-                            "epoch": epoch,
-                            "valid_loss": valid_loss_head,
-                            "valid_rmse_e_per_atom": eval_metrics["rmse_e_per_atom"],
-                            "valid_rmse_f": eval_metrics["rmse_f"],
-                        }
 
-            if log_wandb:
-                wandb.log(wandb_log_dict)
+                    if rank == 0:
+                        valid_err_log(
+                            valid_loss_head,
+                            eval_metrics,
+                            logger,
+                            log_errors,
+                            epoch,
+                            valid_loader_name,
+                        )
+                        if log_wandb:
+                            wandb_log_dict[valid_loader_name] = {
+                                "epoch": epoch,
+                                "valid_loss": valid_loss_head,
+                                "valid_rmse_e_per_atom": eval_metrics["rmse_e_per_atom"],
+                                "valid_rmse_f": eval_metrics["rmse_f"],
+                            }
 
-            if valid_loss >= lowest_loss:
-                patience_counter += 1
-                if patience_counter >= patience and (
-                    swa is not None and epoch < swa.start
-                ):
-                    logging.info(
-                        f"Stopping optimization after {patience_counter} epochs without improvement and starting swa"
-                    )
-                    epoch = swa.start
-                elif patience_counter >= patience and (
-                    swa is None or epoch >= swa.start
-                ):
-                    logging.info(
-                        f"Stopping optimization after {patience_counter} epochs without improvement"
-                    )
-                    break
-                if save_all_checkpoints:
+            if rank == 0:
+                if log_wandb:
+                    wandb.log(wandb_log_dict)
+
+                if valid_loss >= lowest_loss:
+                    patience_counter += 1
+                    if patience_counter >= patience and (
+                        swa is not None and epoch < swa.start
+                    ):
+                        logging.info(
+                            f"Stopping optimization after {patience_counter} epochs without improvement and starting swa"
+                        )
+                        epoch = swa.start
+                    elif patience_counter >= patience and (
+                        swa is None or epoch >= swa.start
+                    ):
+                        logging.info(
+                            f"Stopping optimization after {patience_counter} epochs without improvement"
+                        )
+                        break
+                    if save_all_checkpoints:
+                        param_context = (
+                            ema.average_parameters() if ema is not None else nullcontext()
+                        )
+                        with param_context:
+                            checkpoint_handler.save(
+                                state=CheckpointState(model, optimizer, lr_scheduler),
+                                epochs=epoch,
+                                keep_last=True,
+                            )
+                else:
+                    lowest_loss = valid_loss
+                    patience_counter = 0
                     param_context = (
                         ema.average_parameters() if ema is not None else nullcontext()
                     )
@@ -267,21 +285,9 @@ def train(
                         checkpoint_handler.save(
                             state=CheckpointState(model, optimizer, lr_scheduler),
                             epochs=epoch,
-                            keep_last=True,
+                            keep_last=keep_last,
                         )
-            else:
-                lowest_loss = valid_loss
-                patience_counter = 0
-                param_context = (
-                    ema.average_parameters() if ema is not None else nullcontext()
-                )
-                with param_context:
-                    checkpoint_handler.save(
-                        state=CheckpointState(model, optimizer, lr_scheduler),
-                        epochs=epoch,
-                        keep_last=keep_last,
-                    )
-                    keep_last = False or save_all_checkpoints
+                        keep_last = False or save_all_checkpoints
         if distributed:
             torch.distributed.barrier()
         epoch += 1

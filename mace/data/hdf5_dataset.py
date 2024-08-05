@@ -8,6 +8,10 @@ from mace.data.atomic_data import AtomicData
 from mace.data.utils import Configuration
 from mace.tools.utils import AtomicNumberTable
 
+from tqdm import tqdm
+from functools import partial
+
+tqdm = partial(tqdm, ncols=55)
 
 class HDF5Dataset(Dataset):
     def __init__(self, file_path, r_max, z_table, **kwargs):
@@ -86,7 +90,13 @@ def dataset_from_sharded_hdf5(
 ):
     files = glob(files + "/*")
     datasets = []
-    for file in files:
+
+    if 'rank' not in kwargs or ('rank' in kwargs and kwargs['rank'] == 0):
+        it = tqdm(files)
+    else:
+        it = files
+
+    for file in it:
         datasets.append(HDF5Dataset(file, z_table=z_table, r_max=r_max, **kwargs))
     full_dataset = ConcatDataset(datasets)
     return full_dataset

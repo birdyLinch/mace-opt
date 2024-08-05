@@ -242,7 +242,8 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         "--train_file",
         help="Training set file, format is .xyz or .h5",
         type=str,
-        required=True,
+        required=False,
+        default=None
     )
     parser.add_argument(
         "--valid_file",
@@ -333,10 +334,17 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--heads",
-        help="List of heads in the training set",
+        help="Dict of heads: containing individual files and E0s",
         type=str,
         default=None,
-        required=False,
+        required=True,
+    )
+    parser.add_argument(
+        "--avg_num_neighbor_head",
+        help="head used for avg_num_neighbor",
+        type=str,
+        default="mp_r2scan",
+        required=True,
     )
     parser.add_argument(
         "--multiheads_finetuning",
@@ -725,6 +733,30 @@ def build_preprocess_arg_parser() -> argparse.ArgumentParser:
         help="Key of atomic charges in training xyz",
         type=str,
         default="charges",
+    )
+    parser.add_argument(
+        "--h5_positions_key",
+        help="Key of atomic positions in training h5",
+        type=str,
+        default="positions",
+    )
+    parser.add_argument(
+        "--h5_forces_key",
+        help="Key of atomic forces in training h5",
+        type=str,
+        default="forces",
+    )
+    parser.add_argument(
+        "--h5_energy_key",
+        help="Key of total energy in training h5",
+        type=str,
+        default="energy",
+    )
+    parser.add_argument(
+        "--h5_numbers_key",
+        help="Key of atomic numbers in training h5",
+        type=str,
+        default="numbers",
     )
     parser.add_argument(
         "--atomic_numbers",

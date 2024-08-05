@@ -113,6 +113,137 @@ def get_dataset_from_xyz(
         heads,
     )
 
+def get_dataset_from_h5(
+    train_path: str,
+    valid_path: str,
+    valid_fraction: float,
+    config_type_weights: Dict,
+    test_path: str = None,
+    seed: int = 1234,
+    keep_isolated_atoms: bool = False,
+    h5_positions_key: str = 'atXYZ',
+    h5_numbers_key: str = "atNUM",
+    h5_energy_key: str = 'ePBE0+MBD',
+    h5_forces_key: str = 'totFOR', 
+    ) -> Tuple[SubsetCollection, Optional[Dict[int, float]]]:
+    """Load training and test dataset from xyz file"""
+    atomic_energies_dict, all_train_configs, heads = data.load_from_h5(
+        file_path=train_path,
+        config_type_weights=config_type_weights,
+        h5_positions_key=h5_positions_key,
+        h5_numbers_key=h5_numbers_key,
+        h5_energy_key=h5_energy_key,
+        h5_forces_key=h5_forces_key,
+    )
+    logging.info(
+        f"Loaded {len(all_train_configs)} training configurations from '{train_path}'"
+    )
+    if valid_path is not None:
+        _, valid_configs, _ = data.load_from_h5(
+            file_path=valid_path,
+            config_type_weights=config_type_weights,
+            h5_positions_key=h5_positions_key,
+            h5_numbers_key=h5_numbers_key,
+            h5_energy_key=h5_energy_key,
+            h5_forces_key=h5_forces_key,
+        )
+        logging.info(
+            f"Loaded {len(valid_configs)} validation configurations from '{valid_path}'"
+        )
+        train_configs = all_train_configs
+    else:
+        logging.info(
+            "Using random %s%% of training set for validation", 100 * valid_fraction
+        )
+        train_configs, valid_configs = [], []
+        for head in heads:
+            all_train_configs_head = [
+                config for config in all_train_configs if config.head == head
+            ]
+            train_configs_head, valid_configs_head = data.random_train_valid_split(
+                all_train_configs_head, valid_fraction, seed
+            )
+            train_configs.extend(train_configs_head)
+            valid_configs.extend(valid_configs_head)
+
+    test_configs = []
+    if test_path is not None:
+        _, all_test_configs, _ = data.load_from_h5(
+            file_path=test_path,
+            config_type_weights=config_type_weights,
+            h5_positions_key=h5_positions_key,
+            h5_numbers_key=h5_numbers_key,
+            h5_energy_key=h5_energy_key,
+            h5_forces_key=h5_forces_key,
+        )
+        # create list of tuples (config_type, list(Atoms))
+        test_configs = data.test_config_types(all_test_configs)
+        logging.info(
+            f"Loaded {len(all_test_configs)} test configurations from '{test_path}'"
+        )
+    return (
+        SubsetCollection(train=train_configs, valid=valid_configs, tests=test_configs),
+        atomic_energies_dict,
+        heads,
+    )
+
+def get_dataset_from_extxyzs(
+    train_path: str,
+    valid_path: str,
+    valid_fraction: float,
+    config_type_weights: Dict,
+    test_path: str = None,
+    seed: int = 1234,
+    ) -> Tuple[SubsetCollection, Optional[Dict[int, float]]]:
+    """Load training and test dataset from xyz file"""
+    atomic_energies_dict, all_train_configs, heads = data.load_from_extxyzs(
+        file_path=train_path,
+        config_type_weights=config_type_weights,
+    )
+    logging.info(
+        f"Loaded {len(all_train_configs)} training configurations from '{train_path}'"
+    )
+    if valid_path is not None:
+        _, valid_configs, _ = data.load_from_extxyzs(
+            file_path=valid_path,
+            config_type_weights=config_type_weights,
+        )
+        logging.info(
+            f"Loaded {len(valid_configs)} validation configurations from '{valid_path}'"
+        )
+        train_configs = all_train_configs
+    else:
+        logging.info(
+            "Using random %s%% of training set for validation", 100 * valid_fraction
+        )
+        train_configs, valid_configs = [], []
+        for head in heads:
+            all_train_configs_head = [
+                config for config in all_train_configs if config.head == head
+            ]
+            train_configs_head, valid_configs_head = data.random_train_valid_split(
+                all_train_configs_head, valid_fraction, seed
+            )
+            train_configs.extend(train_configs_head)
+            valid_configs.extend(valid_configs_head)
+
+    test_configs = []
+    if test_path is not None:
+        _, all_test_configs, _ = data.load_from_extxyzs(
+            file_path=test_path,
+            config_type_weights=config_type_weights,
+        )
+        # create list of tuples (config_type, list(Atoms))
+        test_configs = data.test_config_types(all_test_configs)
+        logging.info(
+            f"Loaded {len(all_test_configs)} test configurations from '{test_path}'"
+        )
+    return (
+        SubsetCollection(train=train_configs, valid=valid_configs, tests=test_configs),
+        atomic_energies_dict,
+        heads,
+    )
+
 
 def get_config_type_weights(ct_weights):
     """
@@ -129,7 +260,7 @@ def get_config_type_weights(ct_weights):
     return config_type_weights
 
 
-def get_atomic_energies(E0s, train_collection, z_table, heads) -> dict:
+def get_atomic_energies(E0s, train_collection, z_table, heads=None) -> dict:
     if E0s is not None:
         logging.info(
             "Atomic Energies not in training file, using command line argument E0s"
@@ -250,6 +381,8 @@ def dict_to_array(data, heads):
         unique_keys.update(inner_dict.keys())
     unique_keys = list(unique_keys)
     sorted_keys = sorted([int(key) for key in unique_keys])
+
+    # zeros if does not exist
     result_array = np.zeros((len(data), len(sorted_keys)))
     for _, (head_name, inner_dict) in enumerate(data.items()):
         for key, value in inner_dict.items():

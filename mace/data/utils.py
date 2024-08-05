@@ -5,6 +5,8 @@
 ###########################################################################################
 
 import logging
+import multiprocessing as mp
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -14,6 +16,7 @@ import h5py
 import numpy as np
 
 from mace.tools import AtomicNumberTable
+from tqdm import tqdm
 
 Vector = np.ndarray  # [3,]
 Positions = np.ndarray  # [..., 3]
@@ -197,6 +200,39 @@ def test_config_types(
     return test_by_ct
 
 
+def load_from_extxyzs(
+    file_path: str,
+    config_type_weights: Dict,
+    energy_key: str = "energy",
+    forces_key: str = "forces",
+    stress_key: str = "stress",
+    virials_key: str = "virials",
+    dipole_key: str = "dipole",
+    charges_key: str = "charges",
+    head_key: str = "head",
+) -> Tuple[Dict[int, float], Configurations]:
+    atoms_list = atoms_from_oc20(file_path)
+
+    atomic_energies_dict = {}
+
+    heads = set()
+    for atoms in atoms_list:
+        heads.add(atoms.info.get("head", "Default"))
+    heads = list(heads)
+
+    configs = config_from_atoms_list(
+        atoms_list,
+        config_type_weights=config_type_weights,
+        energy_key="energy",
+        forces_key="forces",
+        stress_key="stress",
+        virials_key="virials",
+        dipole_key="dipole",
+        charges_key="charges",
+        head_key="head",
+    )
+    return atomic_energies_dict, configs, heads
+
 def load_from_xyz(
     file_path: str,
     config_type_weights: Dict,
@@ -312,8 +348,92 @@ def load_from_xyz(
     )
     return atomic_energies_dict, configs, heads
 
+def load_from_h5(
+    file_path: str,
+    config_type_weights: Dict,
+    h5_positions_key: str = 'atXYZ',
+    h5_numbers_key: str = "atNUM",
+    h5_energy_key: str = 'ePBE0+MBD',
+    h5_forces_key: str = 'totFOR',
+) -> Tuple[Dict[int, float], Configurations]:
+    atoms_list = atoms_from_hdf5_ani(
+        file_path, 
+        positions_key=h5_positions_key,
+        numbers_key=h5_numbers_key,
+        energy_key=h5_energy_key,
+        forces_key=h5_forces_key
+    )
 
-def compute_average_E0s(
+
+    atomic_energies_dict = {}
+
+    heads = set()
+    for atoms in atoms_list:
+        heads.add(atoms.info.get("head", "Default"))
+    heads = list(heads)
+
+    configs = config_from_atoms_list(
+        atoms_list,
+        config_type_weights=config_type_weights,
+        energy_key="energy",
+        forces_key="forces",
+        stress_key="stress",
+        virials_key="virials",
+        dipole_key="dipole",
+        charges_key="charges",
+        head_key="head",
+    )
+    return atomic_energies_dict, configs, heads
+
+def atoms_from_hdf5(file_path, positions_key='atXYZ', numbers_key="atNUM", energy_key='ePBE0+MBD', forces_key='totFOR'):
+    aqm = h5py.File(file_path, "r")
+    atoms_list = []
+    AQMmol_ids = list(aqm.keys())
+
+    for molid in AQMmol_ids:
+        AQMconf_ids = list(aqm[molid].keys())
+        for confid in AQMconf_ids:
+            curr_cfg = aqm[molid][confid]
+            atoms = ase.Atoms(positions=np.array(curr_cfg[positions_key]), numbers=np.array(curr_cfg[numbers_key]))
+            atoms.info['energy'] = np.array(curr_cfg[energy_key]).item()
+            atoms.arrays['forces'] = np.array(curr_cfg[forces_key])
+            # atoms.info['head'] = "Default"
+            atoms_list.append(atoms)
+
+    return atoms_list
+
+def atoms_from_hdf5_ani(file_path, positions_key='coordinates', numbers_key="species", energy_key='energies', forces_key='forces'):
+    h5 = h5py.File(file_path, "r")
+    atoms_list = []
+    for num_atoms, properties in tqdm(h5.items()):        #Iterate thorugh like a dictionary
+        coordinates = np.array(properties['coordinates'])     #Output of properties is of type h5py Dataset
+        species = np.array(properties['species'])
+        energies = np.array(properties['energies'])
+        forces = np.array(properties['forces'])
+        for c, s, e, f in zip(coordinates, species, energies, forces):
+            atoms = ase.Atoms(positions=c, numbers=s)
+            atoms.info['energy'] = e * ase.units.Hartree # convert to eV
+            atoms.arrays['forces'] = f  * ase.units.Hartree # convert to eV
+            atoms_list.append(atoms) 
+    return atoms_list
+
+def read_atoms_file(identifier):
+    return ase.io.read(identifier, index=":")
+
+def atoms_from_oc20(file_path, positions_key='coordinates', numbers_key="species", energy_key='energies', forces_key='forces'):
+    filenames = [f for f in os.listdir(file_path) if f.endswith(".extxyz")]
+    identifiers = [os.path.join(file_path, f) for f in filenames if f.endswith(".extxyz")]
+    
+    with mp.Pool(16) as pool:
+        results = list(tqdm(pool.imap(read_atoms_file, identifiers), total=len(identifiers)))
+    
+    # Flatten the list of lists
+    atoms_list = [atom for sublist in results for atom in sublist]
+    
+    return atoms_list
+
+
+def compute_average_E0s( # TODO: compute species dependant
     collections_train: Configurations, z_table: AtomicNumberTable, heads: List[str]
 ) -> Dict[int, float]:
     """
