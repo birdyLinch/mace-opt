@@ -17,7 +17,7 @@
 #SBATCH --array=0-3%1                  # Array index range
 
 # Access arguments
-bs=16
+bs=32
 lr=0.005
 gpu=32
 
@@ -35,7 +35,7 @@ export PATH="$PATH:/linkhome/rech/genrre01/unh55hx/.local/bin"
 DATA_DIR=/lustre/fsn1/projects/rech/gax/unh55hx/data/multihead_dataset
 
 # Running code
-srun bash run_multihead_mpb.sh ${bs} ${lr}
+srun bash run_multihead_mpb_3args.sh ${bs} ${lr} ${gpu}
 
 #mace_run_train \
 #    --name="Test_Multihead_MultiGPU_SpiceMP_MACE" \

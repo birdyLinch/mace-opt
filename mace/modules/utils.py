@@ -267,8 +267,8 @@ def compute_mean_rms_energy_forces(
     forces = torch.cat(forces_list, dim=0)  # {[total_n_graphs*n_atoms,3], }
     head = torch.cat(head_list, dim=0)  # [total_n_graphs]
     head_batch = torch.cat(head_batch, dim=0)  # [total_n_graphs]
-
-    mean = to_numpy(scatter_mean(src=atom_energies, index=head, dim=0).squeeze(-1))
+    
+    mean = to_numpy(scatter_mean(src=atom_energies, index=head, dim=0))
     rms = to_numpy(
         torch.sqrt(
             scatter_mean(src=torch.square(forces), index=head_batch, dim=0).mean(-1)

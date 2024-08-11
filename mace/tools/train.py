@@ -73,6 +73,21 @@ def valid_err_log(
             f"head: {valid_loader_name}, Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_stress={error_stress:.1f} meV / A^3"
         )
     elif (
+        log_errors == "PerAtomRMSE+EMAEstressvirials" and eval_metrics["rmse_stress"] is not None
+    ):  
+        error_e_rmse = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f_rmse = eval_metrics["rmse_f"] * 1e3
+        error_stress_rmse = eval_metrics["rmse_stress"] * 1e3
+        error_e_mae = eval_metrics["mae_e_per_atom"] * 1e3
+        error_f_mae = eval_metrics["mae_f"] * 1e3
+        error_stress_mae = eval_metrics["mae_stress"] * 1e3
+        logging.info(
+            f"head: {valid_loader_name}, Epoch {epoch}: loss={valid_loss:.4f}, \t RMSE_E_per_atom={error_e_rmse:.1f} meV, RMSE_F={error_f_rmse:.1f} meV / A, RMSE_stress={error_stress_rmse:.1f} meV / A^3"
+        )
+        logging.info(
+            f"                                                                 \t MAE_E_per_atom={error_e_mae:.1f} meV, MAE_F={error_f_mae:.1f} meV / A, MAE_stress={error_stress_mae:.1f} meV / A^3"
+        )
+    elif (
         log_errors == "PerAtomRMSEstressvirials"
         and eval_metrics["rmse_virials_per_atom"] is not None
     ):

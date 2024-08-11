@@ -57,6 +57,41 @@ class LinearReadoutBlock(torch.nn.Module):
         return self.linear(x)  # [n_nodes, 1]
 
 
+class GroupavgReadoutBlock(torch.nn.Module):
+    def __init__(self, irreps_in: o3.Irreps,
+                 gate: Optional[Callable],
+                 irrep_out: o3.Irreps=o3.Irreps("0e"),
+                 layered: int=2,    # choice from [0, 1]
+                 resolution: int=2, # choice form [0, 1, 2]
+                ):
+        super().__init__()
+        self.irreps_in = irreps_in
+        self.non_linearity = gate
+        input_size = irreps_in.dim
+        output_size = irrep_out.dim
+        hidden_size = 128
+        self.MLP = torch.nn.Sequential(
+            torch.nn.Linear(input_size, hidden_size),
+            torch.nn.BatchNorm1d(hidden_size),
+            torch.nn.SiLU(),
+            torch.nn.Linear(hidden_size, output_size)
+        )
+        self.layered = layered
+        self.resolution = resolution
+        self.register_buffer("SO3_grid", 
+            o3.quaternion_to_matrix(
+                torch.load(f"/lustre/fsn1/projects/rech/gax/unh55hx/misc/SO3_grid/SO3_grid_{layered}_{resolution}.pt").to(torch.get_default_dtype())))
+
+    def forward(self, x: torch.Tensor, heads: Optional[torch.Tensor] = None):
+        rand_D = o3.rand_matrix(device=x.device)
+        gs = self.SO3_grid_2_2 @ rand_D       # [72, 3, 3]
+        Ds = self.irreps_in.D_from_matrix(gs) # [72, D, D]
+
+        xs = torch.einsum("nd,rjd->nrj", x, Ds) # [n_graphs, D], [72, D, D] -> [n_graphs, 72, D]
+        outs = self.MLP(xs.view(-1, xs.size(-1)))                    # [n_graph, 72, 1]
+        out = torch.mean(outs.view(*xs.shape[:-1], -1), dim=1, keepdim=False)
+        return out
+
 @simplify_if_compile
 @compile_mode("script")
 class NonLinearReadoutBlock(torch.nn.Module):
@@ -80,7 +115,7 @@ class NonLinearReadoutBlock(torch.nn.Module):
     ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         x = self.non_linearity(self.linear_1(x))
         if hasattr(self, "num_heads") and self.num_heads > 1 and heads is not None:
-            x = mask_head(x, heads, self.num_heads)
+            x = mask_head(x, heads, self.num_heads) # decorrelate two mlps
         return self.linear_2(x)  # [n_nodes, len(heads)]
 
 

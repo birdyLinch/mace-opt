@@ -253,7 +253,8 @@ class WeightedHuberEnergyForcesStressLoss(torch.nn.Module):
 
 class UniversalLoss(torch.nn.Module):
     def __init__(
-        self, energy_weight=1.0, forces_weight=1.0, stress_weight=1.0, huber_delta=0.01
+        self, energy_weight=1.0, forces_weight=1.0, stress_weight=1.0, huber_delta=0.01,
+        head_stress_mask=None
     ) -> None:
         super().__init__()
         self.huber_delta = huber_delta
@@ -270,16 +271,27 @@ class UniversalLoss(torch.nn.Module):
             "stress_weight",
             torch.tensor(stress_weight, dtype=torch.get_default_dtype()),
         )
+        self.head_stress_mask=head_stress_mask
 
     def forward(self, ref: Batch, pred: TensorDict) -> torch.Tensor:
         num_atoms = ref.ptr[1:] - ref.ptr[:-1]
-        return (
-            self.energy_weight
-            * self.huber_loss(ref["energy"] / num_atoms, pred["energy"] / num_atoms)
-            + self.forces_weight
-            * conditional_huber_forces(ref, pred, huber_delta=self.huber_delta)
-            + self.stress_weight * self.huber_loss(ref["stress"], pred["stress"])
-        )
+        if self.head_stress_mask is None:
+            return (
+                self.energy_weight
+                * self.huber_loss(ref["energy"] / num_atoms, pred["energy"] / num_atoms)
+                + self.forces_weight
+                * conditional_huber_forces(ref, pred, huber_delta=self.huber_delta)
+                + self.stress_weight * self.huber_loss(ref["stress"], pred["stress"])
+            )
+        else:
+            stress_musk = self.head_stress_mask[ref.head].view(-1, 1, 1)
+            return (
+                self.energy_weight
+                * self.huber_loss(ref["energy"] / num_atoms, pred["energy"] / num_atoms)
+                + self.forces_weight
+                * conditional_huber_forces(ref, pred, huber_delta=self.huber_delta)
+                + self.stress_weight * self.huber_loss(ref["stress"] * stress_musk, pred["stress"] * stress_musk)
+            )
 
     def __repr__(self):
         return (

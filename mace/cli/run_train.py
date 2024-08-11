@@ -256,7 +256,7 @@ def main() -> None:
             head_args.valid_set = data.dataset_from_sharded_hdf5(
                 head_args.valid_file, r_max=head_args.r_max, z_table=z_table, head=head, heads=list(args.heads.keys()), rank=rank
             )
-        
+
         # subset train ratio
         if "train_ratio" in head_args.keys():
             ratio = head_args.train_ratio
@@ -428,11 +428,13 @@ def main() -> None:
             huber_delta=args.huber_delta,
         )
     elif args.loss == "universal":
+        head_stress_mask = torch.Tensor([float('mp' in k) for k in args.heads.keys()]).to(device=device) # TODO: make it general
         loss_fn = modules.UniversalLoss(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             stress_weight=args.stress_weight,
             huber_delta=args.huber_delta,
+            head_stress_mask=head_stress_mask
         )
     elif args.loss == "dipole":
         assert (
@@ -458,7 +460,9 @@ def main() -> None:
     if args.loss in ("stress", "virials", "huber", "universal"):
         compute_virials = True
         args.compute_stress = True
-        args.error_table = "PerAtomRMSEstressvirials"
+        # args.error_table = "PerAtomRMSEstressvirials"
+        logging.info(f"Over-wrighting the error table due to the loss setting -> {args.loss} loss")
+        args.error_table = "PerAtomRMSE+EMAEstressvirials"
 
     output_args = {
         "energy": compute_energy,

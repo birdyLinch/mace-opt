@@ -6,7 +6,7 @@ mace_run_train \
     --model="MACE" \
     --num_interactions=2 \
     --num_channels=224 \
-    --max_L=0 \
+    --max_L=2 \
     --correlation=3 \
     --r_max=5.0 \
     --forces_weight=1000 \
@@ -22,7 +22,6 @@ mace_run_train \
     --num_workers=8 \
     --error_table='PerAtomMAE' \
     --default_dtype="float64"\
-    --device=cuda \
     --seed=0 \
     --save_cpu \
     --restart_latest \
@@ -34,6 +33,8 @@ mace_run_train \
     --swa_forces_weight=100 \
     --start_swa=190 \
     --config="multihead_config/jz_spice_mp_config.yaml" \
+    --device=cuda \
     --distributed \
+    
 
     # seed 0 for test, seed 123 for first run
