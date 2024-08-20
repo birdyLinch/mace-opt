@@ -1,10 +1,19 @@
 #!/bin/bash
 DATA_DIR=/lustre/fsn1/projects/rech/gax/unh55hx/data/multihead_dataset
+cd /lustre/fsn1/projects/rech/gax/unh55hx/temp_branch/multihead-kfac
+
 module load pytorch-gpu/py3/2.3.1
-export PATH="$PATH:/linkhome/rech/genrre01/unh55hx/.local/bin"
+
+# Initialize Conda
+eval "$(conda shell.bash hook)"
+
+conda activate mace-kfac
+export PYTHONPATH=${SCRATCH}/.conda/envs/mace-kfac/lib/python3.11/site-packages/
+#export PATH="$PATH:/linkhome/rech/genrre01/unh55hx/.local/bin"
 REAL_BATCH_SIZE=$(($1 * $3))
+# export NCCL_DEBUG=INFO
 mace_run_train \
-    --name="Test_KFAC_MACE_medium_agnesi_b${REAL_BATCH_SIZE}_lr$2_mponly" \
+    --name="DEV_KFAC_True_MACE_medium_agnesi_b${REAL_BATCH_SIZE}_lr$2_mponly" \
     --loss='universal' \
     --energy_weight=1 \
     --forces_weight=10 \
@@ -45,6 +54,6 @@ mace_run_train \
     --device=cuda \
     --num_workers=8 \
     --distributed \
-
-
+    --kfac \
+    --kfac-skip-layers 'skip_tp' \
 # --name="MACE_medium_agnesi_b32_origin_mponly" \

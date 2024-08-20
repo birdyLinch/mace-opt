@@ -407,6 +407,113 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default="charges",
     )
 
+    
+    # KFAC Parameters
+    parser.add_argument(
+        "--kfac",
+        help="use kfac update",
+        default=False,
+        action="store_true"
+    )
+    parser.add_argument(
+        '--kfac-inv-update-steps',
+        type=int,
+        default=10,
+        help='iters between kfac inv ops (0 disables kfac) (default: 10)',
+    )
+    parser.add_argument(
+        '--kfac-factor-update-steps',
+        type=int,
+        default=1,
+        help='iters between kfac cov ops (default: 1)',
+    )
+    parser.add_argument(
+        '--kfac-update-steps-alpha',
+        type=float,
+        default=10,
+        help='KFAC update step multiplier (default: 10)',
+    )
+    parser.add_argument(
+        '--kfac-update-steps-decay',
+        nargs='+',
+        type=int,
+        default=None,
+        help='KFAC update step decay schedule (default None)',
+    )
+    parser.add_argument(
+        '--kfac-inv-method',
+        action='store_true',
+        default=False,
+        help='Use inverse KFAC update instead of eigen (default False)',
+    )
+    parser.add_argument(
+        '--kfac-factor-decay',
+        type=float,
+        default=0.95,
+        help='Alpha value for covariance accumulation (default: 0.95)',
+    )
+    parser.add_argument(
+        '--kfac-damping',
+        type=float,
+        default=0.003,
+        help='KFAC damping factor (defaultL 0.003)',
+    )
+    parser.add_argument(
+        '--kfac-damping-alpha',
+        type=float,
+        default=0.5,
+        help='KFAC damping decay factor (default: 0.5)',
+    )
+    parser.add_argument(
+        '--kfac-damping-decay',
+        nargs='+',
+        type=int,
+        default=None,
+        help='KFAC damping decay schedule (default None)',
+    )
+    parser.add_argument(
+        '--kfac-kl-clip',
+        type=float,
+        default=0.001,
+        help='KL clip (default: 0.001)',
+    )
+    parser.add_argument(
+        '--kfac-skip-layers',
+        nargs='+',
+        type=str,
+        default=[],
+        help='Layer types to ignore registering with KFAC (default: [])',
+    )
+    parser.add_argument(
+        '--kfac-colocate-factors',
+        action='store_true',
+        default=True,
+        help='Compute A and G for a single layer on the same worker. ',
+    )
+    parser.add_argument(
+        '--kfac-strategy',
+        type=str,
+        default='comm-opt',
+        help='KFAC communication optimization strategy. One of comm-opt, '
+        'mem-opt, or hybrid_opt. (default: comm-opt)',
+    )
+    parser.add_argument(
+        '--kfac-grad-worker-fraction',
+        type=float,
+        default=0.25,
+        help='Fraction of workers to compute the gradients '
+        'when using HYBRID_OPT (default: 0.25)',
+    )
+    parser.add_argument(
+        '--batches-per-allreduce',
+        type=int,
+        default=1,
+        help='number of batches processed locally before '
+        'executing allreduce across workers; it multiplies '
+        'total batch size.',
+    )
+
+
     # Loss and optimization
     parser.add_argument(
         "--loss",

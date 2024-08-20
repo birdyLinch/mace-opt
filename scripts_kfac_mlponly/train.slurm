@@ -3,7 +3,7 @@
 #SBATCH --account=gax@h100           # account
 #SBATCH -C h100                      # target H100 nodes
 # Here, reservation of 3x24=72 CPUs (for 3 tasks) and 3 GPUs (1 GPU per task) on one node only:
-#SBATCH --nodes=1                    # number of node
+#SBATCH --nodes=8                   # number of node
 #SBATCH --ntasks-per-node=4          # number of MPI tasks per node (here = number of GPUs per node)
 #SBATCH --gres=gpu:4                 # number of GPUs per node (max 4 for H100 nodes)
 # Knowing that here we only reserve one GPU per task (i.e. 1/4 of GPUs),
@@ -35,7 +35,7 @@ export PATH="$PATH:/linkhome/rech/genrre01/unh55hx/.local/bin"
 DATA_DIR=/lustre/fsn1/projects/rech/gax/unh55hx/data/multihead_dataset
 
 # Running code
-srun bash run_multihead_mpb_3args_mponly.sh ${bs} ${lr} ${gpu}
+srun bash run_multihead_mpb_3args_kfac_mlp.sh ${bs} ${lr} ${gpu}
 
 #mace_run_train \
 #    --name="Test_Multihead_MultiGPU_SpiceMP_MACE" \

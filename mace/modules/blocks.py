@@ -10,6 +10,10 @@ from typing import Callable, List, Optional, Tuple, Union
 import numpy as np
 import torch.nn.functional
 from e3nn import nn, o3
+from kfac.layers.fcn_tools import FullyConnectedNet
+# substitue nn.FullyConnectedNet with a handmade supporting kfac
+nn.FullyConnectedNet = FullyConnectedNet 
+
 from e3nn.util.jit import compile_mode
 
 from mace.tools.compile import simplify_if_compile

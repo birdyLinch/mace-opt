@@ -4,7 +4,7 @@ module load pytorch-gpu/py3/2.3.1
 export PATH="$PATH:/linkhome/rech/genrre01/unh55hx/.local/bin"
 REAL_BATCH_SIZE=$(($1 * $3))
 mace_run_train \
-    --name="MACE_medium_agnesi_b${REAL_BATCH_SIZE}_lr$2" \
+    --name="KFAC_MACE_medium_agnesi_b${REAL_BATCH_SIZE}_lr$2" \
     --loss='universal' \
     --energy_weight=1 \
     --forces_weight=10 \
@@ -45,6 +45,7 @@ mace_run_train \
     --device=cuda \
     --num_workers=8 \
     --distributed \
+    --kfac \
 
 
 # --name="MACE_medium_agnesi_b32_origin_mponly" \

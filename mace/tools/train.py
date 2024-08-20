@@ -35,6 +35,11 @@ from .utils import (
     compute_rel_rmse,
     compute_rmse,
 )
+from kfac.preconditioner import KFACPreconditioner
+from kfac.scheduler import LambdaParamScheduler
+
+# import torch.distributed as dist
+
 
 
 @dataclasses.dataclass
@@ -154,6 +159,8 @@ def train(
     distributed_model: Optional[DistributedDataParallel] = None,
     train_sampler: Optional[DistributedSampler] = None,
     rank: Optional[int] = 0,
+    kfac: Optional[KFACPreconditioner] = None,
+    kfac_scheduler: Optional[LambdaParamScheduler] = None, 
 ):
     lowest_loss = np.inf
     valid_loss = np.inf
@@ -168,7 +175,9 @@ def train(
     logging.info("Started training")
     epoch = start_epoch
 
-    # log validation loss before _any_ training
+    #print(f"rank {rank}: start val")
+
+    #log validation loss before _any_ training
     valid_loss = 0.0
     for valid_loader_name, valid_loader in valid_loaders.items():
         valid_loss_head, eval_metrics = evaluate(
@@ -182,6 +191,8 @@ def train(
             valid_loss_head, eval_metrics, logger, log_errors, None, valid_loader_name
         )
     valid_loss = valid_loss_head  # consider only the last head for the checkpoint
+
+    #print(f"rank {rank}: end val")
 
     while epoch < max_num_epochs:
         # LR scheduler and SWA update
@@ -201,6 +212,8 @@ def train(
             if epoch > start_epoch:
                 swa.scheduler.step()
 
+        #print(f"rank {rank}: start train")
+        
         # Train
         if distributed:
             train_sampler.set_epoch(epoch)
@@ -218,6 +231,8 @@ def train(
             device=device,
             distributed_model=distributed_model,
             rank=rank,
+            kfac=kfac,
+            kfac_scheduler=kfac_scheduler,
         )
         if distributed:
             torch.distributed.barrier()
@@ -323,6 +338,8 @@ def train_one_epoch(
     device: torch.device,
     distributed_model: Optional[DistributedDataParallel] = None,
     rank: Optional[int] = 0,
+    kfac: Optional[KFACPreconditioner] = None,
+    kfac_scheduler: Optional[LambdaParamScheduler] = None, 
 ) -> None:
     model_to_train = model if distributed_model is None else distributed_model
     
@@ -334,6 +351,7 @@ def train_one_epoch(
 
     
     for batch in data_iter:
+        #print(f"rank {rank}: start batch")
         _, opt_metrics = take_step(
             model=model_to_train,
             loss_fn=loss_fn,
@@ -343,11 +361,15 @@ def train_one_epoch(
             output_args=output_args,
             max_grad_norm=max_grad_norm,
             device=device,
+            kfac=kfac,
         )
         opt_metrics["mode"] = "opt"
         opt_metrics["epoch"] = epoch
         if rank == 0:
             logger.log(opt_metrics)
+
+    if kfac_scheduler is not None:
+        kfac_scheduler.step(step=epoch)
 
 
 def take_step(
@@ -359,11 +381,13 @@ def take_step(
     output_args: Dict[str, bool],
     max_grad_norm: Optional[float],
     device: torch.device,
+    kfac: Optional[KFACPreconditioner] = None,
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
     batch = batch.to(device)
     optimizer.zero_grad(set_to_none=True)
     batch_dict = batch.to_dict()
+    #print(f"rank {dist.get_rank()}: start forward")
     output = model(
         batch_dict,
         training=True,
@@ -371,8 +395,14 @@ def take_step(
         compute_virials=output_args["virials"],
         compute_stress=output_args["stress"],
     )
+    #print(f"rank {dist.get_rank()}: end forward")
     loss = loss_fn(pred=output, ref=batch)
     loss.backward()
+    # TODO: gradient analysis
+    if kfac is not None:
+        #print(f"rank {dist.get_rank()}: start kfac step")
+        kfac.step()
+       # print(f"rank {dist.get_rank()}: end kfac step")
     if max_grad_norm is not None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
     optimizer.step()

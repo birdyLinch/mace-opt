@@ -48,6 +48,7 @@ from mace.tools.finetuning_utils import (
 from mace.tools.utils import AtomicNumberTable
 from torch.utils.data import ConcatDataset
 from box import Box
+from mace.tools.kfac_tools import get_kfac
 
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
@@ -632,6 +633,12 @@ def main() -> None:
             )
     model.to(device)
 
+    #if args.distributed:
+    #    distributed_model = DDP(model, device_ids=[local_rank])
+    #    model = distributed_model.module
+    #else:
+    #    distributed_model = None
+
     # Optimizer
     decay_interactions = {}
     no_decay_interactions = {}
@@ -640,6 +647,7 @@ def main() -> None:
             decay_interactions[name] = param
         else:
             no_decay_interactions[name] = param
+
 
     param_options = dict(
         params=[
@@ -676,10 +684,13 @@ def main() -> None:
     optimizer: torch.optim.Optimizer
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(**param_options)
-    else:
+    elif args.optimizer == "adam":
         optimizer = torch.optim.Adam(**param_options)
+    elif args.optimizer == "sgd_kfac":
+        param_options.pop('amsgrad', None)
+        optimizer = torch.optim.SGD(**param_options)
     if args.device == "xpu":
-        logging.info("Optimzing model and optimzier for XPU")
+        logging.info("Optimzing model and optimizer for XPU")
         model, optimizer = ipex.optimize(model, optimizer=optimizer)
     logger = tools.MetricsLogger(directory=args.results_dir, tag=tag + "_train")
 
@@ -806,6 +817,22 @@ def main() -> None:
     else:
         distributed_model = None
 
+    
+    print(f"rank {rank}: start init KFACPrecond and KFACScheduler")
+    
+    if args.kfac:
+        from kfac.preconditioner import KFACPreconditioner
+        if distributed_model is None:
+            raise NotImplementedError("KFAC only supports distributed training")
+        KFACPrecond, KFACScheduler = get_kfac(distributed_model, optimizer, args)
+        #KFACPrecond, KFACScheduler = get_kfac(model, optimizer, args)
+    else:
+        KFACPrecond = None
+
+    print(f"rank {rank}: finish init KFACPrecond and KFACScheduler")
+
+    #import ipdb; ipdb.set_trace()
+
     tools.train(
         model=model,
         loss_fn=loss_fn,
@@ -831,6 +858,8 @@ def main() -> None:
         distributed_model=distributed_model,
         train_sampler=train_sampler,
         rank=rank,
+        kfac=KFACPrecond,
+        kfac_scheduler=KFACScheduler,
     )
 
     logging.info("Computing metrics for training, validation, and test sets")

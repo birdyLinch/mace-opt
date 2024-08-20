@@ -13,8 +13,8 @@ mace_run_train \
     --energy_weight=40 \
     --weight_decay=5e-10 \
     --clip_grad=1.0 \
-    --batch_size=32 \
-    --valid_batch_size=128 \
+    --batch_size=4 \
+    --valid_batch_size=64 \
     --max_num_epochs=210 \
     --patience=50 \
     --eval_interval=1 \
@@ -32,7 +32,7 @@ mace_run_train \
     --swa_lr=0.00025 \
     --swa_forces_weight=100 \
     --start_swa=190 \
-    --config="multihead_config/jz_spice_mp_config.yaml" \
+    --config="multihead_config/jz_mp_config_r6.0.yaml" \
     --device=cuda \
     --distributed \
     
