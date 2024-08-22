@@ -179,18 +179,18 @@ def train(
 
     #log validation loss before _any_ training
     valid_loss = 0.0
-    for valid_loader_name, valid_loader in valid_loaders.items():
-        valid_loss_head, eval_metrics = evaluate(
-            model=model,
-            loss_fn=loss_fn,
-            data_loader=valid_loader,
-            output_args=output_args,
-            device=device,
-        )
-        valid_err_log(
-            valid_loss_head, eval_metrics, logger, log_errors, None, valid_loader_name
-        )
-    valid_loss = valid_loss_head  # consider only the last head for the checkpoint
+    #for valid_loader_name, valid_loader in valid_loaders.items():
+    #    valid_loss_head, eval_metrics = evaluate(
+    #        model=model,
+    #        loss_fn=loss_fn,
+    #        data_loader=valid_loader,
+    #        output_args=output_args,
+    #        device=device,
+    #    )
+    #    valid_err_log(
+    #        valid_loss_head, eval_metrics, logger, log_errors, None, valid_loader_name
+    #    )
+    #valid_loss = valid_loss_head  # consider only the last head for the checkpoint
 
     #print(f"rank {rank}: end val")
 

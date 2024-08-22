@@ -140,3 +140,32 @@ def default_dtype(dtype: torch.dtype):
     torch.set_default_dtype(dtype)
     yield
     torch.set_default_dtype(init)
+
+
+def save_heatmap(matrix: torch.Tensor, filename: str = 'heatmap.png', cmap: str = 'viridis', dpi: int = 300, figsize: tuple = (10, 10)):
+    """
+    Saves a heatmap of a 2D matrix.
+
+    Parameters:
+    - matrix (torch.Tensor): The 2D tensor to be visualized as a heatmap.
+    - filename (str): The name of the file to save the heatmap to.
+    - cmap (str): The colormap to use for the heatmap.
+    - dpi (int): Dots per inch, affects the quality of the saved image.
+    - figsize (tuple): Size of the figure in inches.
+
+    """
+    import matplotlib.pyplot as plt
+    # Convert the PyTorch tensor to a NumPy array
+    matrix_np = matrix.cpu().numpy()
+
+    # Create the heatmap
+    plt.figure(figsize=figsize)
+    plt.imshow(matrix_np, cmap=cmap, aspect='auto')
+    plt.colorbar()
+    plt.title('Heatmap of Matrix')
+    plt.xlabel('X Axis')
+    plt.ylabel('Y Axis')
+
+    # Save the heatmap as an image file
+    plt.savefig(filename, dpi=dpi)
+    plt.close()
